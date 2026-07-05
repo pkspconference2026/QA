@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Soal Jawab - PKSP 2026</title>
+<style>
+  :root {
+    --bg: #0c1410;
+    --panel: #142019;
+    --panel-2: #1a281f;
+    --border: rgba(244,223,160,0.18);
+    --gold: #d4af6a;
+    --cream: #f4f1ea;
+    --muted: #a8a8a0;
+    --danger: #e0796b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--cream);
+    min-height: 100vh;
+    padding: 20px 16px 60px;
+  }
+  .wrap { max-width: 480px; margin: 0 auto; }
+  header { text-align: center; margin-bottom: 22px; }
+  .eyebrow {
+    color: var(--gold);
+    font-size: 12px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    margin: 0 0 4px;
+  }
+  h1 { font-size: 20px; font-weight: 600; margin: 0; }
+  .card {
+    background: var(--panel);
+    border: 0.5px solid var(--border);
+    border-radius: 14px;
+    padding: 18px;
+    margin-bottom: 18px;
+  }
+  label {
+    display: block;
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+  input, textarea {
+    width: 100%;
+    background: var(--panel-2);
+    border: 0.5px solid var(--border);
+    border-radius: 8px;
+    color: var(--cream);
+    padding: 10px 12px;
+    font-size: 14px;
+    font-family: inherit;
+    margin-bottom: 14px;
+  }
+  input::placeholder, textarea::placeholder { color: #6b6b62; }
+  textarea { resize: none; min-height: 76px; }
+  button.submit {
+    width: 100%;
+    background: var(--gold);
+    color: #2c2308;
+    border: none;
+    border-radius: 8px;
+    padding: 12px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  button.submit:disabled { opacity: 0.5; cursor: default; }
+  .hint {
+    font-size: 11px;
+    color: var(--muted);
+    text-align: center;
+    margin: 10px 0 0;
+  }
+  .section-title {
+    font-size: 12px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin: 0 0 10px;
+  }
+  .q-item {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    padding: 12px 0;
+    border-bottom: 0.5px solid var(--border);
+  }
+  .q-item:last-child { border-bottom: none; }
+  .vote-btn {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    background: var(--panel-2);
+    border: 0.5px solid var(--border);
+    border-radius: 8px;
+    padding: 6px 10px;
+    cursor: pointer;
+    color: var(--cream);
+    min-width: 44px;
+  }
+  .vote-btn.voted { background: rgba(212,175,106,0.18); border-color: var(--gold); color: var(--gold); }
+  .vote-btn span.count { font-size: 13px; font-weight: 600; }
+  .q-text { font-size: 14px; line-height: 1.5; margin: 0 0 4px; }
+  .q-meta { font-size: 11px; color: var(--muted); margin: 0; }
+  .status-msg { text-align: center; font-size: 13px; color: var(--muted); padding: 20px 0; }
+  .toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--panel-2);
+    border: 0.5px solid var(--gold);
+    color: var(--cream);
+    padding: 10px 18px;
+    border-radius: 20px;
+    font-size: 13px;
+    opacity: 0;
+    transition: opacity 0.25s;
+    pointer-events: none;
+  }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <p class="eyebrow">PKSP 2026</p>
+      <h1>Soal jawab persidangan</h1>
+    </header>
+
+    <div class="card">
+      <label for="q-name">Nama (pilihan)</label>
+      <input id="q-name" type="text" placeholder="Cth: Dr Aiman, Perak" maxlength="60" />
+
+      <label for="q-text">Soalan anda</label>
+      <textarea id="q-text" placeholder="Taip soalan di sini..." maxlength="280"></textarea>
+
+      <button class="submit" id="submit-btn">Hantar soalan</button>
+      <p class="hint">Soalan akan disemak oleh urus setia sebelum dipaparkan di skrin.</p>
+    </div>
+
+    <div class="card">
+      <p class="section-title">Undi soalan lain</p>
+      <div id="q-list">
+        <p class="status-msg">Memuatkan soalan...</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
+    import {
+      initializeFirestore, collection, addDoc, query, where,
+      onSnapshot, doc, getDoc, setDoc, deleteDoc, runTransaction,
+      serverTimestamp
+    } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+    import { firebaseConfig, QUESTIONS_COLLECTION, VOTES_COLLECTION, SESSION_ID } from "./firebase-config.js";
+
+    const app = initializeApp(firebaseConfig);
+    // experimentalForceLongPolling: paksa terus guna long-polling tanpa proses
+    // "auto-detect" dulu. Proses detect tu sendiri boleh stuck pada rangkaian
+    // yang sangat ketat (contoh sesetengah ISP/rumah di Malaysia), jadi kita skip
+    // terus ke mod yang paling serasi.
+    const db = initializeFirestore(app, { experimentalForceLongPolling: true });
+
+    // ID peranti ringkas supaya satu peserta tak boleh undi soalan sama berkali-kali.
+    // Ini bukan pengesahan identiti sebenar - hanya elak undi berulang secara tidak sengaja.
+    let deviceId = localStorage.getItem("pksp_device_id");
+    if (!deviceId) {
+      deviceId = crypto.randomUUID();
+      localStorage.setItem("pksp_device_id", deviceId);
+    }
+
+    const nameInput = document.getElementById("q-name");
+    const textInput = document.getElementById("q-text");
+    const submitBtn = document.getElementById("submit-btn");
+    const qList = document.getElementById("q-list");
+    const toastEl = document.getElementById("toast");
+
+    function showToast(msg) {
+      toastEl.textContent = msg;
+      toastEl.classList.add("show");
+      setTimeout(() => toastEl.classList.remove("show"), 2200);
+    }
+
+    // Bungkus addDoc dengan had masa - kalau tiada respons dalam 12 saat,
+    // anggap gagal supaya butang tak stuck selamanya
+    function withTimeout(promise, ms, label) {
+      return Promise.race([
+        promise,
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error(`Tamat masa (${label})`)), ms)
+        )
+      ]);
+    }
+
+    submitBtn.addEventListener("click", async () => {
+      const text = textInput.value.trim();
+      if (!text) { showToast("Sila taip soalan dahulu"); return; }
+      submitBtn.disabled = true;
+      submitBtn.textContent = "Menghantar...";
+      try {
+        await withTimeout(addDoc(collection(db, QUESTIONS_COLLECTION), {
+          text,
+          name: nameInput.value.trim() || "Anonim",
+          status: "pending",
+          voteCount: 0,
+          sessionId: SESSION_ID,
+          createdAt: serverTimestamp()
+        }), 12000, "hantar soalan");
+        textInput.value = "";
+        nameInput.value = "";
+        showToast("Soalan dihantar - menunggu kelulusan");
+      } catch (e) {
+        if (e.code === "permission-denied") {
+          showToast("Ditolak sistem - hubungi urus setia");
+        } else if (e.message && e.message.includes("Tamat masa")) {
+          showToast("Sambungan terlalu perlahan, cuba lagi");
+        } else {
+          showToast("Gagal hantar, cuba lagi");
+        }
+        console.error(e);
+      }
+      submitBtn.disabled = false;
+      submitBtn.textContent = "Hantar soalan";
+    });
+
+    async function toggleVote(questionId, currentVoted) {
+      const voteRef = doc(db, VOTES_COLLECTION, `${questionId}_${deviceId}`);
+      const qRef = doc(db, QUESTIONS_COLLECTION, questionId);
+      try {
+        await withTimeout(runTransaction(db, async (tx) => {
+          const qSnap = await tx.get(qRef);
+          if (!qSnap.exists()) return;
+          const current = qSnap.data().voteCount || 0;
+          if (currentVoted) {
+            tx.delete(voteRef);
+            tx.update(qRef, { voteCount: Math.max(0, current - 1) });
+          } else {
+            tx.set(voteRef, { questionId, deviceId, createdAt: serverTimestamp() });
+            tx.update(qRef, { voteCount: current + 1 });
+          }
+        }), 12000, "undi");
+      } catch (e) {
+        console.error(e);
+        showToast(e.message && e.message.includes("Tamat masa") ? "Sambungan terlalu perlahan, cuba lagi" : "Gagal undi, cuba lagi");
+      }
+    }
+
+    // Semak soalan mana yang deviceId ini dah undi
+    const myVotes = new Set();
+
+    // Query guna sessionId sahaja - elak keperluan composite index Firestore.
+    // Tapisan status dan susunan ikut undi dibuat di sisi browser.
+    const qQuery = query(
+      collection(db, QUESTIONS_COLLECTION),
+      where("sessionId", "==", SESSION_ID)
+    );
+
+    onSnapshot(qQuery, async (snap) => {
+      const docs = snap.docs
+        .filter(d => d.data().status === "approved")
+        .sort((a, b) => (b.data().voteCount || 0) - (a.data().voteCount || 0));
+
+      if (docs.length === 0) {
+        qList.innerHTML = '<p class="status-msg">Belum ada soalan yang diluluskan lagi.</p>';
+        return;
+      }
+      qList.innerHTML = "";
+      for (const docSnap of docs) {
+        const q = docSnap.data();
+        const id = docSnap.id;
+        const voteSnap = await getDoc(doc(db, VOTES_COLLECTION, `${id}_${deviceId}`));
+        const voted = voteSnap.exists();
+
+        const item = document.createElement("div");
+        item.className = "q-item";
+        item.innerHTML = `
+          <button class="vote-btn ${voted ? "voted" : ""}" aria-label="Undi soalan ini">
+            <span class="arrow">&#9650;</span>
+            <span class="count">${q.voteCount || 0}</span>
+          </button>
+          <div>
+            <p class="q-text">${escapeHtml(q.text)}</p>
+            <p class="q-meta">${escapeHtml(q.name || "Anonim")}</p>
+          </div>
+        `;
+        item.querySelector(".vote-btn").addEventListener("click", () => toggleVote(id, voted));
+        qList.appendChild(item);
+      }
+    }, (err) => {
+      console.error(err);
+      qList.innerHTML = '<p class="status-msg">Gagal muatkan soalan.</p>';
+    });
+
+    function escapeHtml(str) {
+      const div = document.createElement("div");
+      div.textContent = str;
+      return div.innerHTML;
+    }
+  </script>
+</body>
+</html>

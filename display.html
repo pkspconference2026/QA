@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Skrin LED - Soal Jawab PKSP 2026</title>
+<style>
+  :root {
+    --bg: #0a1210;
+    --panel: rgba(255,255,255,0.05);
+    --border: rgba(244,223,160,0.15);
+    --gold: #d4af6a;
+    --cream: #ffffff;
+    --muted: #a8a8a0;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--cream);
+    height: 100vh;
+    overflow: hidden;
+    padding: 40px 60px;
+    display: flex;
+    flex-direction: column;
+  }
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 18px;
+    margin-bottom: 24px;
+  }
+  .title { color: var(--gold); font-size: 22px; letter-spacing: 2px; font-weight: 600; margin: 0; text-transform: uppercase; }
+  .live { display: flex; align-items: center; gap: 8px; color: #6fcf97; font-size: 15px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: #6fcf97; animation: pulse 1.6s infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+  .q-list { flex: 1; display: flex; flex-direction: column; gap: 16px; overflow: hidden; }
+  .q-card {
+    background: var(--panel);
+    border-left: 4px solid var(--border);
+    border-radius: 10px;
+    padding: 20px 26px;
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
+  }
+  .q-card.top { background: rgba(212,175,106,0.12); border-left-color: var(--gold); }
+  .vote-badge { display: flex; flex-direction: column; align-items: center; min-width: 50px; flex-shrink: 0; }
+  .vote-badge .n { font-size: 30px; font-weight: 700; color: var(--gold); line-height: 1; }
+  .q-card:not(.top) .vote-badge .n { color: var(--muted); }
+  .vote-badge .label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-top: 4px; }
+  .q-text { font-size: 26px; line-height: 1.4; margin: 0 0 10px; font-weight: 500; }
+  .q-meta { font-size: 15px; color: var(--muted); margin: 0; }
+
+  footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    border-top: 1px solid var(--border);
+    padding-top: 16px;
+    margin-top: 20px;
+    gap: 20px;
+  }
+  footer .qr-block { display: flex; flex-direction: column; align-items: center; gap: 10px; padding-bottom: 6px; }
+  footer p { font-size: 14px; color: var(--muted); margin: 0; text-align: center; }
+  #qr-img { width: 160px; height: 160px; background: #fff; border-radius: 8px; padding: 8px; flex-shrink: 0; }
+  #awang-img {
+    height: 340px;
+    width: auto;
+    display: block;
+    flex-shrink: 0;
+    /* Glow emas berdenyut mengikut bentuk badan (drop-shadow ikut silhouette PNG lutsinar) */
+    animation: awang-glow 3.5s ease-in-out infinite;
+  }
+  @keyframes awang-glow {
+    0%, 100% {
+      filter: drop-shadow(0 0 6px rgba(212,175,106,0.55))
+              drop-shadow(0 0 16px rgba(212,175,106,0.30));
+    }
+    50% {
+      filter: drop-shadow(0 0 14px rgba(244,223,160,0.85))
+              drop-shadow(0 0 34px rgba(212,175,106,0.55));
+    }
+  }
+  .empty { text-align: center; color: var(--muted); font-size: 20px; margin: auto; }
+</style>
+</head>
+<body>
+  <header>
+    <p class="title">PKSP 2026 &middot; Sesi soal jawab</p>
+    <div class="live"><span class="dot"></span> LIVE</div>
+  </header>
+
+  <div class="q-list" id="q-list">
+    <p class="empty">mASIH Menunggu soalan pertama...</p>
+  </div>
+
+  <footer>
+    <div class="qr-block">
+      <p>Imbas kod QR untuk hantar dan undi soalan anda</p>
+      <img id="qr-img" alt="Kod QR untuk borang soal jawab" />
+    </div>
+    <img id="awang-img" src="awang.png" alt="Awang - maskot PKSP 2026" />
+  </footer>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
+    import { initializeFirestore, collection, query, where, onSnapshot } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+    import { firebaseConfig, QUESTIONS_COLLECTION, SESSION_ID } from "./firebase-config.js";
+
+    const app = initializeApp(firebaseConfig);
+    // Paksa long-polling terus - elak proses "auto-detect" yang boleh stuck
+    // pada rangkaian ketat
+    const db = initializeFirestore(app, { experimentalForceLongPolling: true });
+
+    // URL borang soalan - ditetapkan terus (bukan teka dari URL semasa) supaya
+    // QR code sentiasa tepat tak kira macam mana display.html diakses.
+    // PENTING: kalau awak tukar nama repo/domain, kemaskini URL ini.
+    const formUrl = "https://pkspconference2026.github.io/QA/index.html";
+    document.getElementById("qr-img").src =
+      "https://api.qrserver.com/v1/create-qr-code/?size=320x320&data=" + encodeURIComponent(formUrl);
+
+    const MAX_SHOWN = 6;
+    const qList = document.getElementById("q-list");
+
+    // Query guna sessionId sahaja - elak keperluan composite index Firestore.
+    // Tapisan "approved" dan susunan ikut undi dibuat di sisi browser.
+    const qQuery = query(
+      collection(db, QUESTIONS_COLLECTION),
+      where("sessionId", "==", SESSION_ID)
+    );
+
+    onSnapshot(qQuery, (snap) => {
+      const docs = snap.docs
+        .filter(d => d.data().status === "approved")
+        .sort((a, b) => (b.data().voteCount || 0) - (a.data().voteCount || 0))
+        .slice(0, MAX_SHOWN);
+
+      if (docs.length === 0) {
+        qList.innerHTML = '<p class="empty">Menunggu soalan pertama...</p>';
+        return;
+      }
+      qList.innerHTML = "";
+      const topVotes = docs[0].data().voteCount || 0;
+      docs.forEach((docSnap) => {
+        const q = docSnap.data();
+        const isTop = (q.voteCount || 0) === topVotes && topVotes > 0;
+        const card = document.createElement("div");
+        card.className = "q-card" + (isTop ? " top" : "");
+        card.innerHTML = `
+          <div class="vote-badge">
+            <span class="n">${q.voteCount || 0}</span>
+            <span class="label">undi</span>
+          </div>
+          <div>
+            <p class="q-text">${escapeHtml(q.text)}</p>
+            <p class="q-meta">${escapeHtml(q.name || "Anonim")}</p>
+          </div>
+        `;
+        qList.appendChild(card);
+      });
+    }, (err) => console.error(err));
+
+    function escapeHtml(str) {
+      const div = document.createElement("div");
+      div.textContent = str;
+      return div.innerHTML;
+    }
+  </script>
+</body>
+</html>

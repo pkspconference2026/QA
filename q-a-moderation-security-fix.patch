@@ -1,0 +1,150 @@
+diff --git a/index.html b/index.html
+--- a/index.html
++++ b/index.html
+@@
+-      const docs = snap.docs
+-        .filter(d => ["pending", "approved"].includes(d.data().status))
++      const docs = snap.docs
++        .filter(d => d.data().status === "approved")
+         .sort((a, b) => (b.data().voteCount || 0) - (a.data().voteCount || 0));
+ 
+       if (docs.length === 0) {
+-        qList.innerHTML = '<p class="status-msg">Belum ada soalan lagi. Jadi yang pertama!</p>';
++        qList.innerHTML = '<p class="status-msg">Belum ada soalan yang diluluskan lagi.</p>';
+         return;
+       }
+@@
+-            <p class="q-meta">${escapeHtml(q.name || "Anonim")}${q.status === "pending" ? " · menunggu kelulusan" : ""}</p>
++            <p class="q-meta">${escapeHtml(q.name || "Anonim")}</p>
+           </div>
+         `;
+diff --git a/admin.html b/admin.html
+--- a/admin.html
++++ b/admin.html
+@@
+-    <input id="pass-input" type="password" placeholder="Kata laluan moderator" />
+-    <button id="pass-btn" style="width:100%">Masuk</button>
+-    <p class="note">Kata laluan ini hanya sekatan asas di sisi klien - bukan pengesahan selamat. Untuk acara sebenar, gantikan dengan Firebase Authentication.</p>
++    <input id="email-input" type="email" placeholder="Emel moderator" />
++    <input id="pass-input" type="password" placeholder="Kata laluan moderator" />
++    <button id="pass-btn" style="width:100%">Masuk sebagai moderator</button>
++    <p class="note">Gunakan akaun moderator Firebase Authentication. Emel moderator mesti turut dibenarkan dalam firestore.rules.</p>
+   </div>
+@@
+   <script type="module">
+     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
+     import { initializeFirestore, collection, query, where, onSnapshot, doc, updateDoc } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
++    import { getAuth, signInWithEmailAndPassword, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
+     import { firebaseConfig, QUESTIONS_COLLECTION, SESSION_ID } from "./firebase-config.js";
+ 
+-    // Gantikan dengan kata laluan pilihan anda. Ini hanya sekatan asas, bukan keselamatan sebenar.
+-    const MODERATOR_PASSWORD = "pksp2026";
++    const app = initializeApp(firebaseConfig);
++    const db = initializeFirestore(app, { experimentalForceLongPolling: true });
++    const auth = getAuth(app);
++    let appStarted = false;
+ 
+-    document.getElementById("pass-btn").addEventListener("click", () => {
+-      if (document.getElementById("pass-input").value === MODERATOR_PASSWORD) {
+-        document.getElementById("gate").style.display = "none";
+-        document.getElementById("app").style.display = "block";
+-        startApp();
+-      } else {
+-        alert("Kata laluan salah");
+-      }
++    document.getElementById("pass-btn").addEventListener("click", async () => {
++      const email = document.getElementById("email-input").value.trim();
++      const password = document.getElementById("pass-input").value;
++      if (!email || !password) {
++        alert("Sila masukkan emel dan kata laluan moderator");
++        return;
++      }
++      try {
++        await signInWithEmailAndPassword(auth, email, password);
++      } catch (e) {
++        console.error(e);
++        alert("Gagal masuk. Semak emel/kata laluan moderator.");
++      }
++    });
++
++    onAuthStateChanged(auth, (user) => {
++      if (!user || appStarted) return;
++      document.getElementById("gate").style.display = "none";
++      document.getElementById("app").style.display = "block";
++      appStarted = true;
++      startApp();
+     });
+ 
+     function startApp() {
+-      const app = initializeApp(firebaseConfig);
+-      const db = initializeFirestore(app, { experimentalForceLongPolling: true });
+-
+       let allDocs = [];
+       let activeTab = "pending";
+diff --git a/firestore.rules b/firestore.rules
+--- a/firestore.rules
++++ b/firestore.rules
+@@
+ service cloud.firestore {
+   match /databases/{database}/documents {
++    function isModerator() {
++      // Tukar emel di bawah kepada akaun moderator sebenar dalam Firebase Authentication.
++      return request.auth != null
++             && request.auth.token.email in ["moderator@example.com"];
++    }
++
++    function validQuestion(data) {
++      return data.text is string
++             && data.text.size() > 0
++             && data.text.size() <= 280
++             && data.name is string
++             && data.status in ["pending", "approved", "answered", "rejected"]
++             && data.voteCount is int
++             && data.voteCount >= 0
++             && data.sessionId is string;
++    }
+ 
+     match /questions/{questionId} {
+       // Sesiapa boleh baca soalan (perlu untuk borang dan skrin LED)
+       allow read: if true;
+ 
+       // Sesiapa boleh cipta soalan baharu, tetapi mesti status "pending"
+       // dan voteCount mesti bermula dari 0 - elak orang terus approve sendiri
+-      allow create: if request.resource.data.status == "pending"
+-                    && request.resource.data.voteCount == 0
+-                    && request.resource.data.text is string
+-                    && request.resource.data.text.size() > 0
+-                    && request.resource.data.text.size() <= 280;
++      allow create: if validQuestion(request.resource.data)
++                    && request.resource.data.status == "pending"
++                    && request.resource.data.voteCount == 0;
+ 
+-      // Hanya voteCount boleh diubah oleh orang awam (untuk undi).
+-      // Perubahan status (luluskan/tolak) sepatutnya dihadkan kepada moderator
+-      // sahaja - guna Firebase Authentication + custom claims untuk keselamatan sebenar.
+-      // Baris di bawah membenarkan sesiapa ubah voteCount SAHAJA buat masa ini.
+-      allow update: if request.resource.data.diff(resource.data).affectedKeys()
+-                      .hasOnly(["voteCount"]);
++      // Orang awam hanya boleh ubah voteCount untuk undian.
++      allow update: if request.resource.data.diff(resource.data).affectedKeys().hasOnly(["voteCount"])
++                    && request.resource.data.voteCount is int
++                    && request.resource.data.voteCount >= 0;
++
++      // Moderator sah boleh luluskan, tolak, atau tandakan soalan telah dijawab.
++      allow update: if isModerator()
++                    && validQuestion(request.resource.data);
+ 
+       allow delete: if false;
+     }
+ 
+     match /votes/{voteId} {
+       // ID dokumen undi ialah {questionId}_{deviceId}, jadi seorang peranti
+       // hanya boleh ada satu dokumen undi bagi satu soalan
+       allow read: if true;
+-      allow create: if true;
++      allow create: if request.resource.data.questionId is string
++                    && request.resource.data.deviceId is string
++                    && voteId == request.resource.data.questionId + "_" + request.resource.data.deviceId;
+       allow delete: if true;
+       allow update: if false;
+     }

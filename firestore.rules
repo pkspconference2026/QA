@@ -1,0 +1,54 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isModerator() {
+      // Tukar emel di bawah kepada akaun moderator sebenar dalam Firebase Authentication.
+      return request.auth != null
+             && request.auth.token.email in ["eagosjr@gmail.com"];
+    }
+
+    function validQuestion(data) {
+      return data.text is string
+             && data.text.size() > 0
+             && data.text.size() <= 280
+             && data.name is string
+             && data.status in ["pending", "approved", "answered", "rejected"]
+             && data.voteCount is int
+             && data.voteCount >= 0
+             && data.sessionId is string;
+    }
+
+    match /questions/{questionId} {
+      // Sesiapa boleh baca soalan (perlu untuk borang dan skrin LED)
+      allow read: if true;
+
+      // Sesiapa boleh cipta soalan baharu, tetapi mesti status "pending"
+      // dan voteCount mesti bermula dari 0 - elak orang terus approve sendiri
+      allow create: if validQuestion(request.resource.data)
+                    && request.resource.data.status == "pending"
+                    && request.resource.data.voteCount == 0;
+
+      // Orang awam hanya boleh ubah voteCount untuk undian.
+      allow update: if request.resource.data.diff(resource.data).affectedKeys().hasOnly(["voteCount"])
+                    && request.resource.data.voteCount is int
+                    && request.resource.data.voteCount >= 0;
+
+      // Moderator sah boleh luluskan, tolak, atau tandakan soalan telah dijawab.
+      allow update: if isModerator()
+                    && validQuestion(request.resource.data);
+
+      allow delete: if false;
+    }
+
+    match /votes/{voteId} {
+      // ID dokumen undi ialah {questionId}_{deviceId}, jadi seorang peranti
+      // hanya boleh ada satu dokumen undi bagi satu soalan
+      allow read: if true;
+      allow create: if request.resource.data.questionId is string
+                    && request.resource.data.deviceId is string
+                    && voteId == request.resource.data.questionId + "_" + request.resource.data.deviceId;
+      allow delete: if true;
+      allow update: if false;
+    }
+  }
+}
