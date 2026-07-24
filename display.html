@@ -126,7 +126,7 @@
     // URL borang soalan - ditetapkan terus (bukan teka dari URL semasa) supaya
     // QR code sentiasa tepat tak kira macam mana display.html diakses.
     // PENTING: kalau awak tukar nama repo/domain, kemaskini URL ini.
-    const formUrl = "https://pkspconference2026.github.io/Q-A/index.html?sesi=" +
+    const formUrl = "https://pkspconference2026.github.io/QA/index.html?sesi=" +
       encodeURIComponent(SESSION_ID) + "&label=" + encodeURIComponent(getCurrentSessionLabel());
     document.getElementById("qr-img").src =
       "https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=" + encodeURIComponent(formUrl);
