@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Panel Moderator - Admin Page Q-A PKSP 2026</title>
+<title>Panel Moderator - PKSP 2026</title>
 <style>
   :root {
     --bg: #f4f1ea;
@@ -27,6 +27,41 @@
   header { margin-bottom: 20px; }
   .eyebrow { color: var(--gold); font-size: 12px; letter-spacing: 1.5px; text-transform: uppercase; margin: 0 0 4px; font-weight: 600; }
   h1 { font-size: 20px; margin: 0; }
+
+  .session-picker {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 12px 16px; margin-bottom: 16px; display: flex; align-items: center; gap: 12px;
+  }
+  .session-picker label { font-size: 12px; color: var(--muted); font-weight: 600; flex-shrink: 0; }
+  .session-picker select {
+    flex: 1; padding: 8px 10px; border-radius: 7px; border: 1px solid var(--border);
+    font-size: 13px; font-weight: 600; color: var(--text); background: #fff;
+  }
+  .adhoc-box {
+    background: #fbf3e4; border: 1px solid #ecd9ae; border-radius: 10px;
+    padding: 12px 16px; margin-bottom: 16px;
+  }
+  .adhoc-box label { font-size: 12px; color: var(--gold); font-weight: 700; display: block; margin-bottom: 6px; }
+  .adhoc-row { display: flex; gap: 8px; }
+  .adhoc-row input {
+    flex: 1; padding: 9px 10px; border-radius: 7px; border: 1px solid var(--border); font-size: 13px;
+  }
+  .adhoc-row button {
+    background: var(--gold); color: #fff; border: none; border-radius: 7px;
+    padding: 0 16px; font-size: 13px; font-weight: 700; cursor: pointer; flex-shrink: 0;
+  }
+  .adhoc-note { font-size: 11px; color: var(--muted); margin: 8px 0 0; }
+
+  .links-box {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px 16px; margin-bottom: 16px;
+  }
+  .links-title { font-size: 12px; color: var(--muted); font-weight: 600; margin: 0 0 10px; }
+  .links-body { display: flex; align-items: center; gap: 14px; }
+  #session-qr { width: 72px; height: 72px; flex-shrink: 0; border: 1px solid var(--border); border-radius: 6px; }
+  .links-list { display: flex; flex-direction: column; gap: 6px; }
+  .links-list a { font-size: 13px; color: var(--gold); font-weight: 600; text-decoration: none; }
+  .links-list a:hover { text-decoration: underline; }
 
   .tabs { display: flex; gap: 8px; margin-bottom: 18px; }
   .tab {
@@ -92,18 +127,42 @@
 
   <div id="gate">
     <p class="eyebrow">Panel moderator</p>
-    <h1>Admin Page Q-A PKSP 2026</h1>
-    <input id="email-input" type="email" placeholder="Emel moderator" />
+    <h1>PKSP 2026</h1>
     <input id="pass-input" type="password" placeholder="Kata laluan moderator" />
-    <button id="pass-btn" style="width:100%">Masuk sebagai moderator</button>
-    <p class="note">Gunakan akaun moderator Firebase Authentication. Emel moderator mesti turut dibenarkan dalam firestore.rules.</p>
+    <button id="pass-btn" style="width:100%">Masuk</button>
+    <p class="note">Kata laluan ini hanya sekatan asas di sisi klien - bukan pengesahan selamat. Untuk acara sebenar, gantikan dengan Firebase Authentication.</p>
   </div>
 
   <div class="wrap" id="app" style="display:none;">
     <header>
       <p class="eyebrow">Panel moderator</p>
-      <h1>Admin Page Q-A PKSP 2026</h1>
+      <h1>Soal jawab PKSP 2026</h1>
     </header>
+
+    <div class="session-picker">
+      <label for="session-select">Sesi/ceramah semasa</label>
+      <select id="session-select"></select>
+    </div>
+
+    <div class="adhoc-box" id="adhoc-box" style="display:none;">
+      <label for="adhoc-title">Tajuk sesi bebas (ad-hoc)</label>
+      <div class="adhoc-row">
+        <input id="adhoc-title" type="text" placeholder="Cth: Sesi Tambahan - Isu Semasa Kesihatan" maxlength="80" />
+        <button id="adhoc-start">Mula sesi ini</button>
+      </div>
+      <p class="adhoc-note">Sesi ini tidak disimpan dalam senarai tetap - ia wujud sepanjang awak pilih dari dropdown atau kongsi pautannya.</p>
+    </div>
+
+    <div class="links-box" id="links-box">
+      <p class="links-title">Pautan &amp; QR untuk sesi semasa</p>
+      <div class="links-body">
+        <img id="session-qr" alt="Kod QR borang soalan sesi semasa" />
+        <div class="links-list">
+          <a id="link-form" target="_blank" rel="noopener">Buka borang peserta &#8599;</a>
+          <a id="link-display" target="_blank" rel="noopener">Buka skrin LED &#8599;</a>
+        </div>
+      </div>
+    </div>
 
     <div class="tabs">
       <div class="tab active" data-status="pending">Menunggu <span class="count" id="count-pending">0</span></div>
@@ -118,58 +177,125 @@
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
     import { initializeFirestore, collection, query, where, onSnapshot, doc, updateDoc } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
-    import { getAuth, signInWithEmailAndPassword, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
-    import { firebaseConfig, QUESTIONS_COLLECTION, SESSION_ID } from "./firebase-config.js";
+    import { firebaseConfig, QUESTIONS_COLLECTION, SESSIONS, getCurrentSessionId, getSessionLabel, slugifySessionTitle } from "./firebase-config.js";
 
-    const app = initializeApp(firebaseConfig);
-    const db = initializeFirestore(app, { experimentalForceLongPolling: true });
-    const auth = getAuth(app);
-    let appStarted = false;
+    // Gantikan dengan kata laluan pilihan anda. Ini hanya sekatan asas, bukan keselamatan sebenar.
+    const MODERATOR_PASSWORD = "pksp2026";
 
-    document.getElementById("pass-btn").addEventListener("click", async () => {
-      const email = document.getElementById("email-input").value.trim();
-      const password = document.getElementById("pass-input").value;
-      if (!email || !password) {
-        alert("Sila masukkan emel dan kata laluan moderator");
-        return;
+    document.getElementById("pass-btn").addEventListener("click", () => {
+      if (document.getElementById("pass-input").value === MODERATOR_PASSWORD) {
+        document.getElementById("gate").style.display = "none";
+        document.getElementById("app").style.display = "block";
+        startApp();
+      } else {
+        alert("Kata laluan salah");
       }
-      try {
-        await signInWithEmailAndPassword(auth, email, password);
-      } catch (e) {
-        console.error(e);
-        alert("Gagal masuk. Semak emel/kata laluan moderator.");
-      }
-    });
-
-    onAuthStateChanged(auth, (user) => {
-      if (!user || appStarted) return;
-      document.getElementById("gate").style.display = "none";
-      document.getElementById("app").style.display = "block";
-      appStarted = true;
-      startApp();
     });
 
     function startApp() {
+      const app = initializeApp(firebaseConfig);
+      const db = initializeFirestore(app, { experimentalForceLongPolling: true });
+
       let allDocs = [];
       let activeTab = "pending";
+      let unsubscribe = null;
+      let currentSessionId = getCurrentSessionId();
+      // Label sesi bebas disimpan di sini kerana ia tiada dalam SESSIONS tetap
+      let customLabels = {};
 
-      // Query guna sessionId sahaja - elak keperluan composite index Firestore.
-      // Susunan ikut undi dibuat di sisi browser.
-      const qQuery = query(
-        collection(db, QUESTIONS_COLLECTION),
-        where("sessionId", "==", SESSION_ID)
-      );
+      const sessionSelect = document.getElementById("session-select");
+      const adhocBox = document.getElementById("adhoc-box");
+      const adhocTitle = document.getElementById("adhoc-title");
 
-      onSnapshot(qQuery, (snap) => {
-        allDocs = snap.docs
-          .map(d => ({ id: d.id, ...d.data() }))
-          .sort((a, b) => (b.voteCount || 0) - (a.voteCount || 0));
-        render();
-      }, (err) => {
-        console.error("Ralat listener:", err);
-        document.getElementById("q-list").innerHTML =
-          '<p class="empty">Gagal muatkan soalan: ' + (err.code || err.message) + '</p>';
+      function rebuildDropdown() {
+        sessionSelect.innerHTML = "";
+        SESSIONS.forEach(s => {
+          const opt = document.createElement("option");
+          opt.value = s.id; opt.textContent = s.label;
+          sessionSelect.appendChild(opt);
+        });
+        // Sesi bebas yang telah dicipta sepanjang panel ini dibuka
+        Object.entries(customLabels).forEach(([id, label]) => {
+          const opt = document.createElement("option");
+          opt.value = id; opt.textContent = "\u2726 " + label;
+          sessionSelect.appendChild(opt);
+        });
+        const optAdhoc = document.createElement("option");
+        optAdhoc.value = "__adhoc__";
+        optAdhoc.textContent = "+ Sesi bebas (ad-hoc)...";
+        sessionSelect.appendChild(optAdhoc);
+        sessionSelect.value = currentSessionId;
+      }
+      rebuildDropdown();
+
+      function currentLabel() {
+        return customLabels[currentSessionId] || getSessionLabel(currentSessionId);
+      }
+
+      function updateLinksPanel() {
+        const label = currentLabel();
+        const formUrl = "https://pkspconference2026.github.io/Q-A/index.html?sesi=" +
+          encodeURIComponent(currentSessionId) + "&label=" + encodeURIComponent(label);
+        const displayUrl = "https://pkspconference2026.github.io/Q-A/display.html?sesi=" +
+          encodeURIComponent(currentSessionId) + "&label=" + encodeURIComponent(label);
+        document.getElementById("link-form").href = formUrl;
+        document.getElementById("link-display").href = displayUrl;
+        document.getElementById("session-qr").src =
+          "https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=" + encodeURIComponent(formUrl);
+      }
+
+      sessionSelect.addEventListener("change", () => {
+        if (sessionSelect.value === "__adhoc__") {
+          adhocBox.style.display = "block";
+          adhocTitle.focus();
+          sessionSelect.value = currentSessionId; // kekal pada sesi lama sementara tunggu tajuk
+          return;
+        }
+        adhocBox.style.display = "none";
+        currentSessionId = sessionSelect.value;
+        subscribeToSession(currentSessionId);
+        updateLinksPanel();
       });
+
+      document.getElementById("adhoc-start").addEventListener("click", () => {
+        const title = adhocTitle.value.trim();
+        if (!title) { adhocTitle.focus(); return; }
+        const newId = slugifySessionTitle(title);
+        customLabels[newId] = title;
+        currentSessionId = newId;
+        adhocTitle.value = "";
+        adhocBox.style.display = "none";
+        rebuildDropdown();
+        subscribeToSession(currentSessionId);
+        updateLinksPanel();
+      });
+
+      function subscribeToSession(sessionId) {
+        if (unsubscribe) unsubscribe(); // henti dengar sesi lama dulu
+        allDocs = [];
+        render();
+
+        // Query guna sessionId sahaja - elak keperluan composite index Firestore.
+        // Susunan ikut undi dibuat di sisi browser.
+        const qQuery = query(
+          collection(db, QUESTIONS_COLLECTION),
+          where("sessionId", "==", sessionId)
+        );
+
+        unsubscribe = onSnapshot(qQuery, (snap) => {
+          allDocs = snap.docs
+            .map(d => ({ id: d.id, ...d.data() }))
+            .sort((a, b) => (b.voteCount || 0) - (a.voteCount || 0));
+          render();
+        }, (err) => {
+          console.error("Ralat listener:", err);
+          document.getElementById("q-list").innerHTML =
+            '<p class="empty">Gagal muatkan soalan: ' + (err.code || err.message) + '</p>';
+        });
+      }
+
+      subscribeToSession(currentSessionId);
+      updateLinksPanel();
 
       document.querySelectorAll(".tab").forEach(tab => {
         tab.addEventListener("click", () => {

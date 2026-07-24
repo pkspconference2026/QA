@@ -34,6 +34,7 @@
     margin: 0 0 4px;
   }
   h1 { font-size: 20px; font-weight: 600; margin: 0; }
+  .sesi-label { font-size: 13px; color: var(--gold); margin: 6px 0 0; font-weight: 600; }
   .card {
     background: var(--panel);
     border: 0.5px solid var(--border);
@@ -135,6 +136,7 @@
     <header>
       <p class="eyebrow">PKSP 2026</p>
       <h1>Soal jawab persidangan</h1>
+      <p class="sesi-label" id="sesi-label"></p>
     </header>
 
     <div class="card">
@@ -165,7 +167,7 @@
       onSnapshot, doc, getDoc, setDoc, deleteDoc, runTransaction,
       serverTimestamp
     } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
-    import { firebaseConfig, QUESTIONS_COLLECTION, VOTES_COLLECTION, SESSION_ID } from "./firebase-config.js";
+    import { firebaseConfig, QUESTIONS_COLLECTION, VOTES_COLLECTION, getCurrentSessionId, getCurrentSessionLabel } from "./firebase-config.js";
 
     const app = initializeApp(firebaseConfig);
     // experimentalForceLongPolling: paksa terus guna long-polling tanpa proses
@@ -173,6 +175,11 @@
     // yang sangat ketat (contoh sesetengah ISP/rumah di Malaysia), jadi kita skip
     // terus ke mod yang paling serasi.
     const db = initializeFirestore(app, { experimentalForceLongPolling: true });
+
+    // Sesi ditentukan dari URL (?sesi=ceramah-1). Setiap sesi/ceramah ada QR
+    // code sendiri yang membawa ke URL dengan parameter ini.
+    const SESSION_ID = getCurrentSessionId();
+    document.getElementById("sesi-label").textContent = getCurrentSessionLabel();
 
     // ID peranti ringkas supaya satu peserta tak boleh undi soalan sama berkali-kali.
     // Ini bukan pengesahan identiti sebenar - hanya elak undi berulang secara tidak sengaja.
@@ -270,11 +277,11 @@
 
     onSnapshot(qQuery, async (snap) => {
       const docs = snap.docs
-        .filter(d => d.data().status === "approved")
+        .filter(d => ["pending", "approved"].includes(d.data().status))
         .sort((a, b) => (b.data().voteCount || 0) - (a.data().voteCount || 0));
 
       if (docs.length === 0) {
-        qList.innerHTML = '<p class="status-msg">Belum ada soalan yang diluluskan lagi.</p>';
+        qList.innerHTML = '<p class="status-msg">Belum ada soalan lagi. Jadi yang pertama!</p>';
         return;
       }
       qList.innerHTML = "";
@@ -293,7 +300,7 @@
           </button>
           <div>
             <p class="q-text">${escapeHtml(q.text)}</p>
-            <p class="q-meta">${escapeHtml(q.name || "Anonim")}</p>
+            <p class="q-meta">${escapeHtml(q.name || "Anonim")}${q.status === "pending" ? " · menunggu kelulusan" : ""}</p>
           </div>
         `;
         item.querySelector(".vote-btn").addEventListener("click", () => toggleVote(id, voted));

@@ -65,9 +65,9 @@
     margin-top: 20px;
     gap: 20px;
   }
-  footer .qr-block { display: flex; flex-direction: column; align-items: center; gap: 10px; padding-bottom: 6px; }
-  footer p { font-size: 14px; color: var(--muted); margin: 0; text-align: center; }
-  #qr-img { width: 160px; height: 160px; background: #fff; border-radius: 8px; padding: 8px; flex-shrink: 0; }
+  footer .qr-block { display: flex; align-items: center; gap: 12px; padding-bottom: 6px; }
+  footer p { font-size: 14px; color: var(--muted); margin: 0; }
+  #qr-img { width: 64px; height: 64px; background: #fff; border-radius: 4px; padding: 4px; flex-shrink: 0; }
   #awang-img {
     height: 340px;
     width: auto;
@@ -91,12 +91,12 @@
 </head>
 <body>
   <header>
-    <p class="title">PKSP 2026 &middot; Sesi soal jawab</p>
-    <div class="live"><span class="dot"></span> LIVE</div>
+    <p class="title" id="screen-title">PKSP 2026 &middot; Sesi soal jawab</p>
+    <div class="live"><span class="dot"></span> Langsung</div>
   </header>
 
   <div class="q-list" id="q-list">
-    <p class="empty">Sedang menunggu soalan pertama...</p>
+    <p class="empty">Menunggu soalan pertama...</p>
   </div>
 
   <footer>
@@ -110,19 +110,26 @@
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
     import { initializeFirestore, collection, query, where, onSnapshot } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
-    import { firebaseConfig, QUESTIONS_COLLECTION, SESSION_ID } from "./firebase-config.js";
+    import { firebaseConfig, QUESTIONS_COLLECTION, getCurrentSessionId, getCurrentSessionLabel } from "./firebase-config.js";
 
     const app = initializeApp(firebaseConfig);
     // Paksa long-polling terus - elak proses "auto-detect" yang boleh stuck
     // pada rangkaian ketat
     const db = initializeFirestore(app, { experimentalForceLongPolling: true });
 
+    // Sesi ditentukan dari URL (?sesi=ceramah-1) - setiap sesi ada display.html
+    // dengan parameter sendiri supaya soalan tak bercampur antara ceramah/pembentangan.
+    const SESSION_ID = getCurrentSessionId();
+    document.getElementById("screen-title").textContent =
+      "PKSP 2026 \u00b7 " + getCurrentSessionLabel();
+
     // URL borang soalan - ditetapkan terus (bukan teka dari URL semasa) supaya
     // QR code sentiasa tepat tak kira macam mana display.html diakses.
     // PENTING: kalau awak tukar nama repo/domain, kemaskini URL ini.
-    const formUrl = "https://pkspconference2026.github.io/QA/index.html";
+    const formUrl = "https://pkspconference2026.github.io/Q-A/index.html?sesi=" +
+      encodeURIComponent(SESSION_ID) + "&label=" + encodeURIComponent(getCurrentSessionLabel());
     document.getElementById("qr-img").src =
-      "https://api.qrserver.com/v1/create-qr-code/?size=320x320&data=" + encodeURIComponent(formUrl);
+      "https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=" + encodeURIComponent(formUrl);
 
     const MAX_SHOWN = 6;
     const qList = document.getElementById("q-list");
@@ -141,7 +148,7 @@
         .slice(0, MAX_SHOWN);
 
       if (docs.length === 0) {
-        qList.innerHTML = '<p class="empty">Sedang menunggu soalan pertama...</p>';
+        qList.innerHTML = '<p class="empty">Menunggu soalan pertama...</p>';
         return;
       }
       qList.innerHTML = "";
